@@ -1,0 +1,79 @@
+# docker network create loki
+
+version: "3.8"
+
+networks:
+  loki:
+    external:
+      true
+
+services:
+
+  apiconversao:
+    image: fabricioveronez/api-conversao:log
+    ports:
+      - "8181:5000"
+    volumes:
+      - "./logs/apiconversao:/logs"
+    environment: 
+      LOG_FILE: /logs/application.log      
+    networks:
+      - loki      
+
+  api:
+    image: fabricioveronez/api-logs:v1
+    ports:
+      - "8080:80"
+    networks:
+      - loki
+    volumes: 
+      - "./logs/api:/log"
+    environment: 
+      Mongo__Host: "mongodb"
+      Mongo__User: "mongouser"
+      Mongo__Password: "mongopwd"
+      Mongo__Port: "27017"
+      Mongo__DataBase: "admin"
+    depends_on: 
+      - mongodb    
+
+  mongodb:
+    image: mongo
+    networks:
+      - loki        
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: "mongouser"
+      MONGO_INITDB_ROOT_PASSWORD: "mongopwd"
+  loki:
+    image: grafana/loki:2.0.0
+    ports:
+      - "3100:3100"
+    command: 
+      - -config.file=/etc/loki/local-config.yaml
+      - -print-config-stderr=true
+    networks:
+      - loki
+
+  promtail:
+    image: grafana/promtail:2.0.0
+    command: -config.file=/etc/promtail/config.yml
+    volumes: 
+      - "./logs/api:/logs/api"
+      - "./logs/apiconversao:/logs/apiconversao"
+      - "./promtail/config.yaml:/etc/promtail/config.yml"    
+    depends_on: 
+      - loki
+      - api    
+    networks:
+      - loki
+    ports:
+      - 9080:9080
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on: 
+      - loki              
+    networks:
+      - loki
